@@ -41,13 +41,17 @@ module SeetemapClient
     end
 
     private
+    def environment
+      @environment ||= ENV["RAILS_ENV"] || ENV["RACK_ENV"] || "development"
+    end
+
     def configuration
       @configuration ||= YAML.load File.open("config/seetemap.yml")
     end
 
     def render_sitemap
       path = "tmp/sitemap.xml"
-      Seetemap.config(configuration["seetemap"]["auth_token"], configuration["seetemap"]["site_token"])
+      Seetemap.config(configuration[environment]["auth_token"], configuration[environment]["site_token"])
 
       if File.exists?(path)
         # file has been considered fresh in the last day
