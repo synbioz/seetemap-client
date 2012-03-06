@@ -51,7 +51,7 @@ module SeetemapClient
         last_modified = Time.parse(@@response["audit"]["finished_at"]) rescue Time.now
         Time.now if time >= last_modified
       when 2 # only a running audit is available, use the previous audit
-        Time.parse(@@response["audit"]["started_at"]) rescue Time.now
+        Time.parse(@@response["audit"]["requested_at"]) rescue Time.now
       end
     end
 
