@@ -23,13 +23,20 @@ module SeetemapClient
       get("/fr/dashboard/websites/#{@@site_token}.xml", :query => { :auth_token => @@auth_token })
     end
 
-    def self.fresh?
-      # TODO
-      false
+    def self.fresh?(time)
+      r = head("/fr/dashboard/websites/#{@@site_token}.xml", :query => { :auth_token => @@auth_token })
+      if r.headers.key? "etag"
+        last_modified = Time.parse(r.headers["etag"])
+        time >= last_modified
+      else
+        false
+      end
     end
   end
 
   class Application < Sinatra::Base
+    DEFAULT_CONF = {"keep_delay" => 3600}
+
     get '/sitemap' do
       content_type 'text/xml'
       render_sitemap
@@ -46,7 +53,11 @@ module SeetemapClient
     end
 
     def configuration
-      @configuration ||= YAML.load File.open("config/seetemap.yml")
+      @configuration ||= DEFAULT_CONF.merge(YAML.load(File.open("config/seetemap.yml")))
+    end
+
+    def locally_fresh?(time)
+      time > (Time.now - configuration[environment]["keep_delay"])
     end
 
     def render_sitemap
@@ -54,11 +65,12 @@ module SeetemapClient
       Seetemap.config(configuration[environment]["auth_token"], configuration[environment]["site_token"])
 
       if File.exists?(path)
+        time = File.mtime(path)
         # file has been considered fresh in the last day
-        if File.mtime(path) > (Time.now - 86400)
+        if locally_fresh?(time)
           File.read(path)
         # api tell us it's fresh
-        elsif Seetemap.fresh?
+        elsif Seetemap.fresh?(time)
           FileUtils.touch path
           File.read(path)
         else

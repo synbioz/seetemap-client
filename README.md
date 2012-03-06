@@ -18,3 +18,4 @@
   seetemap:
     auth_token: "account token"
     site_token: "api_key"
+    keep_delay: 3600
