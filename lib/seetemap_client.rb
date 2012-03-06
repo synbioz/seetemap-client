@@ -25,8 +25,8 @@ module SeetemapClient
 
     def self.fresh?(time)
       r = head("/fr/dashboard/websites/#{@@site_token}.xml", :query => { :auth_token => @@auth_token })
-      if r.headers.key? "etag"
-        last_modified = Time.parse(r.headers["etag"]) rescue Time.now
+      if (requested_at = r.headers["requested_at"])
+        last_modified = Time.parse(requested_at) rescue Time.now
         time >= last_modified
       else
         false
