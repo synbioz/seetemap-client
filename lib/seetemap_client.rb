@@ -20,7 +20,7 @@ module SeetemapClient
     end
 
     def self.sitemap
-      get("/dashboard/websites/#{@@site_token}.xml", :query => { :auth_token => @@auth_token })
+      get("/fr/dashboard/websites/#{@@site_token}.xml", :query => { :auth_token => @@auth_token })
     end
 
     def self.fresh?
