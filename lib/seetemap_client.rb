@@ -9,31 +9,34 @@ module SeetemapClient
   class Seetemap
     include HTTParty
     base_uri 'seetemap.staging.synbioz.com'
-    format :xml
 
     # hack: don't auto parse result
-    parser(Proc.new { |body, format| body })
+    NO_PARSER = Proc.new { |body, format| body }
 
     def self.config(auth_token, site_token)
       @@auth_token = auth_token
       @@site_token = site_token
     end
 
-    # Call ping! before or get an empty sitemap.
+    # Call fetch! before or you'll get an empty sitemap.
     #
     # @return [String] sitemap content
     def self.sitemap
       if self.available?
-        get("/fr/dashboard/websites/#{@@site_token}.xml", :query => { :auth_token => @@auth_token })
+        get("/fr/dashboard/websites/#{@@site_token}.xml",
+            :format => :xml,
+            :query => { :auth_token => @@auth_token },
+            :parser => NO_PARSER)
       else
         "<?xml version=\"1.0\" encoding=\"UTF-8\"?><urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\"></urlset>"
       end
     end
 
-    # Cache the response inside the Seetemap class. Must be called for each
-    # interaction with the server.
-    def self.ping!
-      @@response = get("/fr/dashboard/websites/#{@@site_token}.json", :format => :json, :query => { :auth_token => @@auth_token })
+    # Cache the audit list inside the Seetemap class. Must be called for each
+    # interaction with the server that need fresh information about the audits.
+    def self.fetch!
+      @@response = get("/fr/dashboard/websites/#{@@site_token}/audits.json",
+                       :query => { :auth_token => @@auth_token })
     end
 
     # Get the most recent timestamp that can be applyied to the audit when
@@ -43,26 +46,36 @@ module SeetemapClient
     # @param [Time] actual timestamp of the current cached sitemap
     # @return [nil|Time] nil if there is a fresher audit available or the time to update
     def self.fresh?(time)
-      return nil if @@response.nil?
-      case @@response["code"]
-      when 0 # no available audits or error
-        nil
-      when 1 # a finished audit is available
-        last_modified = Time.parse(@@response["audit"]["finished_at"]) rescue Time.now
-        Time.now if time >= last_modified
-      when 2 # only a running audit is available, use the previous audit
-        Time.parse(@@response["audit"]["requested_at"]) rescue Time.now
+      return nil if @@response.nil? or @@response.code != 200
+     
+      last_audit          = @@response.parsed_response.first 
+      last_finished_audit = @@response.parsed_response.find {|audit| audit["finished_at"]}
+      
+      if last_audit.nil?
+        Time.now
+      elsif last_finished_audit.nil?
+        Time.parse(last_audit["requested_at"]) rescue time
+      else
+        result = if last_audit["finished_at"].nil?
+          Time.parse(last_audit["requested_at"]) rescue time
+        else
+          Time.now
+        end
+        last_modified = Time.parse(last_finished_audit["finished_at"]) rescue time
+        result if time > last_modified
       end
     end
 
     # @return [Boolean] true if an audit is available, false otherwise
     def self.available?
-      @@response and @@response["code"] == 1
+      @@response and
+        @@response.code == 200 and
+        @@response.parsed_response.find {|audit| audit["finished_at"]}
     end
   end
 
   class Application < Sinatra::Base
-    DEFAULT_CONF = {"keep_delay" => 3600}
+    DEFAULT_CONF = {"keep_delay" => 3600}
 
     get '/sitemap' do
       content_type 'text/xml'
@@ -90,7 +103,7 @@ module SeetemapClient
     def render_sitemap
       path = "tmp/sitemap.xml"
       Seetemap.config(configuration[environment]["auth_token"], configuration[environment]["site_token"])
-      Seetemap.ping!
+      Seetemap.fetch!
 
       if File.exists?(path)
         time = File.mtime(path)
