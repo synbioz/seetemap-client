@@ -75,8 +75,6 @@ module SeetemapClient
   end
 
   class Application < Sinatra::Base
-    DEFAULT_CONF = {"keep_delay" => 3600}
-
     get '/sitemap' do
       content_type 'text/xml'
       render_sitemap
@@ -93,11 +91,11 @@ module SeetemapClient
     end
 
     def configuration
-      @configuration ||= DEFAULT_CONF.merge(YAML.load(File.open("config/seetemap.yml")))
+      @configuration ||= YAML.load File.open("config/seetemap.yml")
     end
 
     def locally_fresh?(time)
-      time > (Time.now - configuration[environment]["keep_delay"])
+      time > (Time.now - configuration[environment]["keep_delay"] || 3600)
     end
 
     def render_sitemap
@@ -126,7 +124,7 @@ module SeetemapClient
       base_path = File.dirname(path)
       Dir.mkdir(base_path) unless Dir.exists?(base_path)
       sitemap = Seetemap.sitemap
-      File.open(path, "w+") { |file| file.write(sitemap) }
+      File.open(path, "w+") { |file| file.write(sitemap) } if Seetemap.available?
       sitemap.to_s
     end
   end
