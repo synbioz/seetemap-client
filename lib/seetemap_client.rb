@@ -18,59 +18,61 @@ module SeetemapClient
       @@site_token = site_token
     end
 
-    # Call fetch! before or you'll get an empty sitemap.
+    # You must be certain that fetch! returns a valid status code before calling
+    # this function.
     #
     # @return [String] sitemap content
     def self.sitemap
-      if self.available?
-        get("/fr/dashboard/websites/#{@@site_token}.xml",
-            :format => :xml,
-            :query => { :auth_token => @@auth_token },
-            :parser => NO_PARSER)
-      else
-        "<?xml version=\"1.0\" encoding=\"UTF-8\"?><urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\"></urlset>"
-      end
+      get("/fr/dashboard/websites/#{@@site_token}.xml",
+          :format => :xml,
+          :query => { :auth_token => @@auth_token },
+          :parser => NO_PARSER)
     end
 
     # Cache the audit list inside the Seetemap class. Must be called for each
     # interaction with the server that need fresh information about the audits.
+    #
+    # This call returns an http code matching the current situation:
+    # - 404 : no remote audit found, check your api_key
+    # - 401 : your not authorized to get this site map, check your token
+    # - 500 : server error / malformed response
+    # - 204 : no audit is available
+    # - 200 : an audit is available
+    #
+    # @return[Integer] response code
     def self.fetch!
       @@response = get("/fr/dashboard/websites/#{@@site_token}/audits.json",
                        :query => { :auth_token => @@auth_token })
+
+      return @@response.code if @@response.nil? or @@response.code != 200
+
+      @@last_audit          = @@response.parsed_response.first 
+      @@last_finished_audit = @@response.parsed_response.find {|audit| audit["finished_at"]}
+
+      if @@last_audit.nil? or @@last_finished_audit.nil?
+        204
+      else
+        200
+      end
     end
 
     # Get the most recent timestamp that can be applyied to the audit when
-    # there is no fresher audit available. Return nil if there is no audit
-    # or no fresher audit.
+    # there is no fresher audit available. 
     #
     # @param [Time] actual timestamp of the current cached sitemap
     # @return [nil|Time] nil if there is a fresher audit available or the time to update
     def self.fresh?(time)
-      return nil if @@response.nil? or @@response.code != 200
-     
-      last_audit          = @@response.parsed_response.first 
-      last_finished_audit = @@response.parsed_response.find {|audit| audit["finished_at"]}
-      
-      if last_audit.nil?
-        Time.now
-      elsif last_finished_audit.nil?
-        Time.parse(last_audit["requested_at"]) rescue time
+      if @@last_audit.nil? or @@last_finished_audit.nil?
+        nil
       else
-        result = if last_audit["finished_at"].nil?
-          Time.parse(last_audit["requested_at"]) rescue time
-        else
-          Time.now
-        end
-        last_modified = Time.parse(last_finished_audit["finished_at"]) rescue time
-        result if time > last_modified
+        result = if @@last_audit["finished_at"].nil?
+            Time.parse(@@last_audit["requested_at"]) rescue time
+          else
+            Time.now
+          end
+        last_modified = Time.parse(@@last_finished_audit["finished_at"]) rescue time
+        time > last_modified ? result : nil
       end
-    end
-
-    # @return [Boolean] true if an audit is available, false otherwise
-    def self.available?
-      @@response and
-        @@response.code == 200 and
-        @@response.parsed_response.find {|audit| audit["finished_at"]}
     end
   end
 
@@ -101,22 +103,25 @@ module SeetemapClient
     def render_sitemap
       path = "tmp/sitemap.xml"
       Seetemap.config(configuration[environment]["auth_token"], configuration[environment]["site_token"])
-      Seetemap.fetch!
-
-      if File.exists?(path)
-        time = File.mtime(path)
-        # file has been considered fresh in the last day
-        if locally_fresh?(time)
-          File.read(path)
-        # api tell us it's fresh
-        elsif (time_to_update = Seetemap.fresh?(time))
-          FileUtils.touch path, :mtime => time_to_update
-          File.read(path)
+      code = Seetemap.fetch!
+      case code
+      when 200
+        if File.exists?(path)
+          time = File.mtime(path)
+          if locally_fresh?(time)
+            File.read(path)
+          elsif (time_to_update = Seetemap.fresh?(time))
+            FileUtils.touch path, :mtime => time_to_update
+            File.read(path)
+          else
+            create_sitemap_file(path)
+          end
         else
           create_sitemap_file(path)
         end
       else
-        create_sitemap_file(path)
+        status code
+        nil
       end
     end
 
@@ -124,7 +129,7 @@ module SeetemapClient
       base_path = File.dirname(path)
       Dir.mkdir(base_path) unless Dir.exists?(base_path)
       sitemap = Seetemap.sitemap
-      File.open(path, "w+") { |file| file.write(sitemap) } if Seetemap.available?
+      File.open(path, "w+") { |file| file.write(sitemap) }
       sitemap.to_s
     end
   end
