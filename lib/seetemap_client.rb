@@ -8,7 +8,7 @@ require 'yaml'
 module SeetemapClient
   class Seetemap
     include HTTParty
-    base_uri 'seetemap.staging.synbioz.com'
+    base_uri 'https://seetemap.staging.synbioz.com'
 
     # hack: don't auto parse result
     NO_PARSER = Proc.new { |body, format| body }
