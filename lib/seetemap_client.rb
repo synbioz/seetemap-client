@@ -79,12 +79,12 @@ module SeetemapClient
   class Application < Sinatra::Base
     get '/sitemap' do
       content_type 'text/xml'
-      render_sitemap
+      render_sitemap(params[:force_reload])
     end
 
     get '/sitemap.xml' do
       content_type 'text/xml'
-      render_sitemap
+      render_sitemap(params[:force_reload])
     end
 
     private
@@ -100,7 +100,7 @@ module SeetemapClient
       time > (Time.now - configuration[environment]["keep_delay"] || 3600)
     end
 
-    def render_sitemap
+    def render_sitemap(force_reload)
       path = "tmp/sitemap.xml"
       Seetemap.config(configuration[environment]["auth_token"], configuration[environment]["site_token"])
       code = Seetemap.fetch!
@@ -108,7 +108,9 @@ module SeetemapClient
       when 200
         if File.exists?(path)
           time = File.mtime(path)
-          if locally_fresh?(time)
+          if force_reload
+            create_sitemap_file(path)
+          elsif locally_fresh?(time)
             File.read(path)
           elsif (time_to_update = Seetemap.fresh?(time))
             FileUtils.touch path, :mtime => time_to_update
