@@ -5,6 +5,8 @@ require 'httparty'
 require 'fileutils'
 require 'yaml'
 
+require 'seetemap_client/version'
+
 module SeetemapClient
   class Seetemap
     include HTTParty
