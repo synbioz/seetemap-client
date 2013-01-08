@@ -37,7 +37,7 @@ With the version `0.0.13` (see `/seetemap/ping`), the step 4 and 5 will be the m
 
 ## GET '/seetemap/'
 
-This is the namespece for any other API calls.
+This is the namespace for any other API calls.
 
 ### GET '/seetemap/version'
 
@@ -45,7 +45,9 @@ Return 200 with the `Content-type` header set to `application/json`.
 
 The response contains an single object containing one property: `version` and it is a string.
 
-  {'version':'0.0.13'}
+```
+{'version':'0.0.13'}
+```
 
 ### GET '/seetemap/purge'
 
@@ -53,7 +55,7 @@ Return 200 with an empty body. When this request is received, the cached-copy of
 
 ### GET '/seetemap/ping'
 
-It tells the client that `seetemap.com` have a new audit ready for being fetched.
+It tells the client that `seetemap.com` have a new audit ready for being fetched. The client purge its cached copy and ask immediatly for another one.
 
 **Parameters:**
 
@@ -63,7 +65,10 @@ It tells the client that `seetemap.com` have a new audit ready for being fetched
 
 ## The config/seetemap.yml config file
 
-  development:
-    auth_token: "account token"
-    site_token: "api_key"
-    keep_delay: 3600
+```
+development:
+  mount_point: "http://url.of.your.website.com"
+  auth_token: "account token"
+  site_token: "api_key"
+  keep_delay: 3600
+```

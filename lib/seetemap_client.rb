@@ -8,6 +8,8 @@ require 'yaml'
 require 'seetemap_client/version'
 
 module SeetemapClient
+  SITEMAP_PATH = "tmp/sitemap.xml"
+
   class Seetemap
     include HTTParty
     base_uri 'https://seetemap.com'
@@ -48,7 +50,7 @@ module SeetemapClient
 
       return @@response.code if @@response.nil? or @@response.code != 200
 
-      @@last_audit          = @@response.parsed_response.first 
+      @@last_audit          = @@response.parsed_response.first
       @@last_finished_audit = @@response.parsed_response.find {|audit| audit["finished_at"]}
 
       if @@last_audit.nil? or @@last_finished_audit.nil?
@@ -76,6 +78,12 @@ module SeetemapClient
         time > last_modified ? result : nil
       end
     end
+
+    def self.ping_google(mount_point)
+      url = mount_point.chomp('/') << '/sitemap.xml'
+      escaped_url = URI.escape(url, Regexp.new("[^#{URI::PATTERN::UNRESERVED}]"))
+      HTTParty.get('http://www.google.com/webmasters/tools/ping?sitemap=' + escaped_url)
+    end
   end
 
   class Application < Sinatra::Base
@@ -89,39 +97,66 @@ module SeetemapClient
       render_sitemap(params[:force_reload])
     end
 
+    get '/seetemap/version' do
+      content_type 'application/json'
+      "{\"version\":\"#{SeetemapClient::VERSION}\"}"
+    end
+
+    get '/seetemap/purge' do
+      remove_sitemap_file
+      nil
+    end
+
+    get '/seetemap/ping' do
+      Seetemap.config(configuration["auth_token"], configuration["site_token"])
+      code = Seetemap.fetch!
+      unless code != 200
+        remove_sitemap_file
+        create_sitemap_file
+        if params[:fwd_google] && mount_point
+          Seetemap.ping_google(mount_point)
+        end
+      end
+      status code
+    end
+
     private
+
     def environment
       @environment ||= ENV["RAILS_ENV"] || ENV["RACK_ENV"] || "development"
     end
 
     def configuration
-      @configuration ||= YAML.load File.open("config/seetemap.yml")
+      @configuration ||= YAML.load(File.open("config/seetemap.yml"))[environment]
+    end
+
+    def mount_point
+      configuration["mount_point"]
     end
 
     def locally_fresh?(time)
-      time > (Time.now - configuration[environment]["keep_delay"] || 3600)
+      time > (Time.now - configuration["keep_delay"] || 3600)
     end
 
     def render_sitemap(force_reload)
-      path = "tmp/sitemap.xml"
-      Seetemap.config(configuration[environment]["auth_token"], configuration[environment]["site_token"])
+      Seetemap.config(configuration["auth_token"], configuration["site_token"])
       code = Seetemap.fetch!
       case code
       when 200
-        if File.exists?(path)
-          time = File.mtime(path)
+        if File.exists?(SeetemapClient::SITEMAP_PATH)
+          time = File.mtime(SeetemapClient::SITEMAP_PATH)
           if force_reload
-            create_sitemap_file(path)
+            create_sitemap_file
           elsif locally_fresh?(time)
-            File.read(path)
+            File.read(SeetemapClient::SITEMAP_PATH)
           elsif (time_to_update = Seetemap.fresh?(time))
-            FileUtils.touch path, :mtime => time_to_update
-            File.read(path)
+            FileUtils.touch SeetemapClient::SITEMAP_PATH, :mtime => time_to_update
+            File.read(SeetemapClient::SITEMAP_PATH)
           else
-            create_sitemap_file(path)
+            create_sitemap_file
           end
         else
-          create_sitemap_file(path)
+          create_sitemap_file
         end
       else
         status code
@@ -129,11 +164,17 @@ module SeetemapClient
       end
     end
 
-    def create_sitemap_file(path)
-      base_path = File.dirname(path)
+    def remove_sitemap_file
+      if File.exists?(SeetemapClient::SITEMAP_PATH)
+        File.delete(SeetemapClient::SITEMAP_PATH)
+      end
+    end
+
+    def create_sitemap_file
+      base_path = File.dirname(SeetemapClient::SITEMAP_PATH)
       Dir.mkdir(base_path) unless Dir.exists?(base_path)
       sitemap = Seetemap.sitemap
-      File.open(path, "w+") { |file| file.write(sitemap) }
+      File.open(SeetemapClient::SITEMAP_PATH, "w+") { |file| file.write(sitemap) }
       sitemap.to_s
     end
   end
