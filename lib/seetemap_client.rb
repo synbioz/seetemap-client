@@ -48,7 +48,7 @@ module SeetemapClient
       @@response = get("/fr/dashboard/websites/#{@@site_token}/audits.json",
                        :query => { :auth_token => @@auth_token })
 
-      return @@response.code if @@response.nil? or @@response.code != 200
+      return @@response.code if @@response.nil? || @@response.code != 200
 
       @@last_audit          = @@response.parsed_response.first
       @@last_finished_audit = @@response.parsed_response.find {|audit| audit["finished_at"]}
