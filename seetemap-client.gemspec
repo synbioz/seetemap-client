@@ -17,6 +17,6 @@ Gem::Specification.new do |s|
   s.add_runtime_dependency 'sinatra'
   s.add_runtime_dependency 'httparty'
 
-  s.files        = Dir.glob("{app,test}/**/*") + %w(README.md CHANGELOG.md)
+  s.files        = Dir.glob("lib/**/*") + %w(README.md CHANGELOG.md)
   s.require_path = 'lib'
 end
