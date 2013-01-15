@@ -9,10 +9,11 @@ require 'seetemap_client/version'
 
 module SeetemapClient
   SITEMAP_PATH = "tmp/sitemap.xml"
+  SEETEMAP_URL = 'https://seetemap.com'
 
   class Seetemap
     include HTTParty
-    base_uri 'https://seetemap.com'
+    base_uri SEETEMAP_URL
 
     # hack: don't auto parse result
     NO_PARSER = Proc.new { |body, format| body }
@@ -103,11 +104,13 @@ module SeetemapClient
     end
 
     get '/seetemap/purge' do
+      headers 'Access-Control-Allow-Origin' => SEETEMAP_URL, 'Access-Control-Allow-Methods' => 'GET, OPTIONS'
       remove_sitemap_file
       nil
     end
 
     get '/seetemap/ping' do
+      headers 'Access-Control-Allow-Origin' => SEETEMAP_URL, 'Access-Control-Allow-Methods' => 'GET, OPTIONS'
       Seetemap.config(configuration["auth_token"], configuration["site_token"])
       code = Seetemap.fetch!
       unless code != 200
